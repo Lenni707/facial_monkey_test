@@ -17,6 +17,7 @@ let socket;
 let latestResult = null;
 let frameTimer = null;
 let streamReady = false;
+let confettiHoldTimer = null;
 
 async function start() {
   createConfetti();
@@ -89,13 +90,23 @@ function sendFrame() {
 function updateUi(result) {
   confidenceLabel.textContent = Number(result.confidence || 0).toFixed(2);
   memePanel.dataset.activeImage = result.activeImage || "";
-  document.body.dataset.confetti = result.confettiActive ? "active" : "";
   confettiLayer.style.setProperty("--confetti-intensity", String(Number(result.confettiIntensity || 0).toFixed(2)));
+  updateConfetti(result.confettiActive);
   reactionLabel.textContent = reactionWord(result.activeImage, result.confettiActive);
   monkeyImage.classList.toggle("available", Boolean(result.monkeyImageAvailable));
   speedFaceImage.classList.toggle("available", Boolean(result.speedFaceImageAvailable));
   moggingImage.classList.toggle("available", Boolean(result.moggingImageAvailable));
   drawOverlay(result);
+}
+
+function updateConfetti(active) {
+  if (active) {
+    document.body.dataset.confetti = "active";
+    window.clearTimeout(confettiHoldTimer);
+    confettiHoldTimer = window.setTimeout(() => {
+      document.body.dataset.confetti = "";
+    }, 2200);
+  }
 }
 
 function createConfetti() {

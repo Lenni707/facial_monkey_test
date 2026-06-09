@@ -5,7 +5,7 @@ A containerized Python webcam app that shows your camera feed on the left and di
 - `assets/thinking_monkey.jpeg` when your finger is detected near your mouth.
 - `assets/speed_face.png` when your eyes are closed and your lips are closed in a near-circle shape.
 - `assets/mogger.jpeg` when your index finger is detected on your lower chin, away from the mouth.
-- A full-screen 67-piece `6`/`7` confetti shower when both hands move up and down asynchronously; faster motion increases the intensity.
+- A full-screen looping 67-piece `6`/`7` confetti shower when both hands move up and down asynchronously; faster motion increases the intensity.
 
 When multiple image reactions are active, the app shows the one with the highest confidence. The right pane also shows one word for the current reaction: `none`, `monkey`, `speed`, `mogging`, or `confetti`.
 

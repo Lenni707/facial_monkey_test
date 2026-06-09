@@ -18,6 +18,7 @@
 - Changed the confetti pieces to `6` and `7` characters.
 - Made confetti intensity scale with hand motion speed.
 - Moved the confetti shower over the whole screen and lengthened the animation.
+- Added a hold window so the full confetti animation keeps playing and loops while motion persists.
 - Changed image reaction selection to use the highest active confidence.
 - Tightened speed face to require a closed mouth with a near-circle outer lip shape.
 - Added Dockerfile and Docker Compose configuration.
