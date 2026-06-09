@@ -22,13 +22,17 @@ let faceLandmarker = null;
 let handLandmarker = null;
 let latestResult = null;
 let streamReady = false;
-let confettiHoldTimer = null;
 let previousHandCenters = null;
 let lastVideoTime = -1;
 
 let monkeyImageAvailable = false;
 let speedFaceImageAvailable = false;
 let moggingImageAvailable = false;
+
+// Confetti state variables
+let lastConfettiTriggerTime = 0;
+let maxConfettiIntensityInSession = 0;
+const CONFETTI_MIN_DURATION = 2000; // 2 seconds minimum play window
 
 async function start() {
   createConfetti();
@@ -143,13 +147,28 @@ function runDetection() {
 
   const fingerMouthConfidence = computeFingerMouthConfidence(face, hands, width, height);
   const chinFingerConfidence = computeChinFingerConfidence(face, hands, width, height);
-  const confettiConfidence = computeConfettiConfidence(hands, height);
+  const rawConfettiConfidence = computeConfettiConfidence(hands, height);
   const speedFaceConfidence = computeSpeedFaceConfidence(face);
+
+  // Apply stateful lock to keep confetti active for a minimum of 2 seconds once triggered
+  const now = performance.now();
+  if (rawConfettiConfidence >= CONFETTI_THRESHOLD) {
+    lastConfettiTriggerTime = now;
+    maxConfettiIntensityInSession = Math.max(maxConfettiIntensityInSession, rawConfettiConfidence);
+  }
+
+  let confettiConfidence = 0.0;
+  let confettiActive = false;
+  if (now - lastConfettiTriggerTime < CONFETTI_MIN_DURATION) {
+    confettiActive = true;
+    confettiConfidence = maxConfettiIntensityInSession;
+  } else {
+    maxConfettiIntensityInSession = 0.0;
+  }
 
   const fingerMouthActive = fingerMouthConfidence >= FINGER_MOUTH_THRESHOLD;
   const speedFaceActive = speedFaceConfidence >= SPEED_FACE_THRESHOLD;
   const chinFingerActive = chinFingerConfidence >= CHIN_FINGER_THRESHOLD;
-  const confettiActive = confettiConfidence >= CONFETTI_THRESHOLD;
 
   const activeImage = strongestActiveImage([
     ["monkey", fingerMouthConfidence, FINGER_MOUTH_THRESHOLD],
@@ -202,12 +221,16 @@ function extractFace(results, width, height) {
   const chinPoints = chinIndexes.map(i => [landmarks[i].x * width, landmarks[i].y * height]);
 
   const metrics = extractFaceMetrics(landmarks, width, height);
+  const mouthWidth = distancePx(landmarks[61], landmarks[291], width, height);
+  const faceWidth = distancePx(landmarks[234], landmarks[454], width, height);
 
   return {
     box: squareBox(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys), width, height),
     mouth: mouthCenter,
     chinPoints: chinPoints,
-    metrics: metrics
+    metrics: metrics,
+    mouthWidth: mouthWidth,
+    faceWidth: faceWidth
   };
 }
 
@@ -258,16 +281,28 @@ function computeFingerMouthConfidence(face, hands, width, height) {
   }
 
   const [mouthX, mouthY] = face.mouth;
-  const frameScale = Math.hypot(width, height);
-  const closeDistance = frameScale * 0.035;
-  const farDistance = frameScale * 0.16;
+  const mouthWidth = face.mouthWidth;
   let confidence = 0.0;
 
   for (const hand of hands) {
     const [fingerX, fingerY] = hand.fingertip;
-    const distance = Math.hypot(fingerX - mouthX, fingerY - mouthY);
-    const handConfidence = 1.0 - ((distance - closeDistance) / (farDistance - closeDistance));
-    confidence = Math.max(confidence, handConfidence);
+    const dx = Math.abs(fingerX - mouthX);
+    const dy = Math.abs(fingerY - mouthY);
+
+    // Only trigger if index fingertip is:
+    // - Horizontally close to the mouth (within mouthWidth * 0.9)
+    // - Vertically close (within mouthWidth * 0.45, slightly over, on, or slightly under lips)
+    const maxDx = mouthWidth * 0.9;
+    const maxDy = mouthWidth * 0.45;
+
+    if (dx <= maxDx && dy <= maxDy) {
+      const dist = Math.hypot(dx, dy);
+      const closeDistance = mouthWidth * 0.15;
+      const farDistance = Math.hypot(maxDx, maxDy);
+
+      const handConfidence = 1.0 - ((dist - closeDistance) / (farDistance - closeDistance));
+      confidence = Math.max(confidence, handConfidence);
+    }
   }
 
   return Number(Math.max(0.0, Math.min(1.0, confidence)).toFixed(2));
@@ -335,7 +370,8 @@ function computeConfettiConfidence(hands, height) {
     return 0.0;
   }
 
-  const confidence = normalizedScore(normalizedSpeed, 0.025, 0.14);
+  // More sensitive thresholds (0.01, 0.08) for faster detection
+  const confidence = normalizedScore(normalizedSpeed, 0.01, 0.08);
   return Number(Math.max(0.0, Math.min(1.0, confidence)).toFixed(2));
 }
 
@@ -411,10 +447,8 @@ function updateUi(result) {
 function updateConfetti(active) {
   if (active) {
     document.body.dataset.confetti = "active";
-    window.clearTimeout(confettiHoldTimer);
-    confettiHoldTimer = window.setTimeout(() => {
-      document.body.dataset.confetti = "";
-    }, 2200);
+  } else {
+    document.body.dataset.confetti = "";
   }
 }
 
