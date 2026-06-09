@@ -159,14 +159,16 @@ body[data-confetti="active"] .confetti-layer {
 .meme-panel[data-active-image="monkey"] #monkeyImage.available,
 .meme-panel[data-active-image="speedFace"] #speedFaceImage.available,
 .meme-panel[data-active-image="mogging"] #moggingImage.available,
-.meme-panel[data-active-image="silenced"] #silencedImage.available {
+.meme-panel[data-active-image="silenced"] #silencedImage.available,
+.meme-panel[data-active-image="67"] #sixtySevenImage.available {
   display: block;
 }
 
 .meme-panel[data-active-image="monkey"] #monkeyImage.available ~ .placeholder,
 .meme-panel[data-active-image="speedFace"] #speedFaceImage.available ~ .placeholder,
 .meme-panel[data-active-image="mogging"] #moggingImage.available ~ .placeholder,
-.meme-panel[data-active-image="silenced"] #silencedImage.available ~ .placeholder {
+.meme-panel[data-active-image="silenced"] #silencedImage.available ~ .placeholder,
+.meme-panel[data-active-image="67"] #sixtySevenImage.available ~ .placeholder {
   display: none;
 }
 

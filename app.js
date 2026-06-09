@@ -11,6 +11,7 @@ const monkeyImage = document.getElementById("monkeyImage");
 const speedFaceImage = document.getElementById("speedFaceImage");
 const moggingImage = document.getElementById("moggingImage");
 const silencedImage = document.getElementById("silencedImage");
+const sixtySevenImage = document.getElementById("sixtySevenImage");
 
 const overlayContext = overlay.getContext("2d");
 
@@ -31,6 +32,7 @@ let monkeyImageAvailable = false;
 let speedFaceImageAvailable = false;
 let moggingImageAvailable = false;
 let silencedImageAvailable = false;
+let sixtySevenImageAvailable = false;
 
 // Confetti state variables
 let lastConfettiTriggerTime = 0;
@@ -75,11 +77,13 @@ async function refreshAssetStatus() {
     speedFaceImageAvailable = await checkAsset("assets/speed_face.png");
     moggingImageAvailable = await checkAsset("assets/mogger.jpeg");
     silencedImageAvailable = await checkAsset("assets/psst.png");
+    sixtySevenImageAvailable = await checkAsset("assets/67.jpeg");
 
     monkeyImage.classList.toggle("available", monkeyImageAvailable);
     speedFaceImage.classList.toggle("available", speedFaceImageAvailable);
     moggingImage.classList.toggle("available", moggingImageAvailable);
     silencedImage.classList.toggle("available", silencedImageAvailable);
+    sixtySevenImage.classList.toggle("available", sixtySevenImageAvailable);
   } catch (error) {
     console.error("Error checking assets client-side:", error);
   }
@@ -224,7 +228,8 @@ function runDetection() {
     { name: "monkey", state: monkeyState },
     { name: "speedFace", state: speedFaceState },
     { name: "mogging", state: chinFingerState },
-    { name: "silenced", state: silencedState }
+    { name: "silenced", state: silencedState },
+    { name: "67", state: { active: confettiActive, confidence: confettiConfidence } }
   ].filter(c => c.state.active);
 
   let activeImage = null;
@@ -264,7 +269,8 @@ function runDetection() {
     monkeyImageAvailable,
     speedFaceImageAvailable,
     moggingImageAvailable,
-    silencedImageAvailable
+    silencedImageAvailable,
+    sixtySevenImageAvailable
   };
 
   updateUi(latestResult);
@@ -588,6 +594,7 @@ function updateUi(result) {
   speedFaceImage.classList.toggle("available", Boolean(result.speedFaceImageAvailable));
   moggingImage.classList.toggle("available", Boolean(result.moggingImageAvailable));
   silencedImage.classList.toggle("available", Boolean(result.silencedImageAvailable));
+  sixtySevenImage.classList.toggle("available", Boolean(result.sixtySevenImageAvailable));
   drawOverlay(result);
 }
 
@@ -651,8 +658,8 @@ function reactionWord(activeImage, confettiActive) {
   if (activeImage === "silenced") {
     return "silenced";
   }
-  if (confettiActive) {
-    return "confetti";
+  if (activeImage === "67" || confettiActive) {
+    return "67";
   }
   return "none";
 }
