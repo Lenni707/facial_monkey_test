@@ -154,14 +154,18 @@ function runDetection() {
   const now = performance.now();
   if (rawConfettiConfidence >= CONFETTI_THRESHOLD) {
     lastConfettiTriggerTime = now;
-    maxConfettiIntensityInSession = Math.max(maxConfettiIntensityInSession, rawConfettiConfidence);
+    // Boost raw confidence to at least 0.85 for a clean, thick shower
+    maxConfettiIntensityInSession = Math.max(maxConfettiIntensityInSession, rawConfettiConfidence, 0.85);
   }
 
   let confettiConfidence = 0.0;
   let confettiActive = false;
-  if (now - lastConfettiTriggerTime < CONFETTI_MIN_DURATION) {
+  const timeSinceTrigger = now - lastConfettiTriggerTime;
+  if (timeSinceTrigger < CONFETTI_MIN_DURATION) {
     confettiActive = true;
-    confettiConfidence = maxConfettiIntensityInSession;
+    // Decays smoothly from peak down to 30% of peak at 2 seconds
+    const progress = timeSinceTrigger / CONFETTI_MIN_DURATION;
+    confettiConfidence = maxConfettiIntensityInSession * (1.0 - progress * 0.7);
   } else {
     maxConfettiIntensityInSession = 0.0;
   }
@@ -217,7 +221,7 @@ function extractFace(results, width, height) {
   const mouthPoints = mouthIndexes.map(i => [landmarks[i].x * width, landmarks[i].y * height]);
   const mouthCenter = averagePoint(mouthPoints);
 
-  const chinIndexes = [152, 148, 176, 149, 150, 377, 400, 378, 379];
+  const chinIndexes = [152, 148, 176, 149, 150, 136, 172, 377, 400, 378, 379, 365, 397];
   const chinPoints = chinIndexes.map(i => [landmarks[i].x * width, landmarks[i].y * height]);
 
   const metrics = extractFaceMetrics(landmarks, width, height);
@@ -287,18 +291,31 @@ function computeFingerMouthConfidence(face, hands, width, height) {
   for (const hand of hands) {
     const [fingerX, fingerY] = hand.fingertip;
     const dx = Math.abs(fingerX - mouthX);
-    const dy = Math.abs(fingerY - mouthY);
+    const dy = fingerY - mouthY; // positive if below mouth center
 
-    // Only trigger if index fingertip is:
-    // - Horizontally close to the mouth (within mouthWidth * 0.9)
-    // - Vertically close (within mouthWidth * 0.45, slightly over, on, or slightly under lips)
+    // Horizontal limit: must be close to mouth center
     const maxDx = mouthWidth * 0.9;
-    const maxDy = mouthWidth * 0.45;
+    
+    // Vertical limits:
+    // - Upwards: up to mouthWidth * 0.45 (slightly over upper lip)
+    // - Downwards: up to mouthWidth * 0.20 (prevent triggering downwards of the lower lip)
+    const maxDyUp = mouthWidth * 0.45;
+    const maxDyDown = mouthWidth * 0.20;
 
-    if (dx <= maxDx && dy <= maxDy) {
+    let isWithinVerticalBounds = false;
+    let limitY = 0;
+    if (dy < 0) { // Finger is above mouth center
+      isWithinVerticalBounds = Math.abs(dy) <= maxDyUp;
+      limitY = maxDyUp;
+    } else { // Finger is below mouth center
+      isWithinVerticalBounds = dy <= maxDyDown;
+      limitY = maxDyDown;
+    }
+
+    if (dx <= maxDx && isWithinVerticalBounds) {
       const dist = Math.hypot(dx, dy);
       const closeDistance = mouthWidth * 0.15;
-      const farDistance = Math.hypot(maxDx, maxDy);
+      const farDistance = Math.hypot(maxDx, limitY);
 
       const handConfidence = 1.0 - ((dist - closeDistance) / (farDistance - closeDistance));
       confidence = Math.max(confidence, handConfidence);
@@ -314,15 +331,19 @@ function computeChinFingerConfidence(face, hands, width, height) {
   }
 
   const [mouthX, mouthY] = face.mouth;
-  const frameScale = Math.hypot(width, height);
-  const closeDistance = frameScale * 0.03;
-  const farDistance = frameScale * 0.10;
+  const mouthWidth = face.mouthWidth;
+  const faceWidth = face.faceWidth;
+
+  const closeDistance = faceWidth * 0.07;
+  const farDistance = faceWidth * 0.22;
   let confidence = 0.0;
 
   for (const hand of hands) {
     const finger = hand.fingertip;
     const mouthDistance = Math.hypot(finger[0] - mouthX, finger[1] - mouthY);
-    if (mouthDistance < frameScale * 0.10) {
+    
+    // Ensure the finger is vertically below the mouth and not on the lips
+    if (finger[1] < mouthY + mouthWidth * 0.20) {
       continue;
     }
 
