@@ -26,16 +26,19 @@
 - Started the app container with `docker compose up -d`.
 - Initialized the local git repository.
 - Created and pushed the public GitHub repository: https://github.com/Lenni707/facial_monkey_test
-
-## In Progress
-- None.
+- **Converted the app to a 100% static client-side application** by moving MediaPipe vision models to run in the browser using WebAssembly.
+- **Removed the Python backend and Docker configuration** to make the app backend-free, lightweight, and deployable on static hosting platforms.
+- **Renamed the local folder and GitHub repository** to `meme_face_recognition` (new Pages URL: https://lenni707.github.io/meme_face_recognition/).
+- **Downloaded MediaPipe model task files locally** (`face_landmarker.task` and `hand_landmarker.task`) into the `assets` folder to ensure self-contained loading without external dependencies.
+- **Tightened the monkey reaction trigger** to only activate when the finger is on or slightly above the lips, preventing activation if the finger moves downwards below the lower lip.
+- **Fixed the chin/mogging trigger scale issues** by replacing screen-height based bounding boxes with dynamic face-width and mouth-width scaled limits.
+- **Expanded jawline landmark points** (`chinIndexes` from 9 to 13 points) to support triggering the mogging reaction anywhere around the chin/jaw contour.
+- **Upgraded confetti up-and-down motion checks** to require strict, high-speed vertical opposite movements of both hands, filtering out single-hand waving noise or vertical jitters.
+- **Optimized confetti rendering performance** by switching to a dynamic particle spawner in JS, eliminating CSS-recalculation animation stutters.
+- **Added the "silenced" gesture trigger** (`psst.png`) when holding the index finger vertically over the lips.
+- **Added a 300ms gesture cooldown buffer** to prevent images and confidence indicators from flickering due to temporary tracking dropouts.
+- **Simplified the default placeholder text** to the plain text: `"No motion detected."`.
 
 ## Future
-- Replace `assets/thinking_monkey.jpeg` if a different meme image is wanted later.
-- Replace `assets/speed_face.png` if a different expression image is wanted later.
-- Add or replace `assets/mogger.jpeg` for the chin/jaw gesture.
-- Open the app in a browser and verify webcam permissions.
-- Tune the finger-to-mouth confidence threshold if needed.
-- Tune the facial-expression confidence threshold if needed.
-- Tune the chin/jaw gesture confidence threshold if needed.
-- Tune the asynchronous hand-motion confetti threshold if needed.
+- Add or replace custom reaction image files in the `assets/` folder if desired.
+- Fine-tune specific gesture triggers' thresholds if needed.
