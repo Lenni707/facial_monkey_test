@@ -8,10 +8,10 @@
 - Added the `assets/` folder with `assets/monkey_thinking.png` reserved for the user-supplied meme.
 - Added Dockerfile and Docker Compose configuration.
 - Initialized the local git repository.
+- Created and pushed the public GitHub repository: https://github.com/Lenni707/facial_monkey_test
 
 ## In Progress
-- Commit the initial project files.
-- Create a public GitHub repository with `gh`.
+- None.
 
 ## Future
 - Add `assets/monkey_thinking.png` manually.
