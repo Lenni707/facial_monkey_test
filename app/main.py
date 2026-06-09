@@ -23,8 +23,9 @@ MOGGING_IMAGE = ASSETS_DIR / "mogger.jpeg"
 
 FRAME_PREFIX = "data:image/jpeg;base64,"
 FINGER_MOUTH_THRESHOLD = 0.70
-SPEED_FACE_THRESHOLD = 0.62
+SPEED_FACE_THRESHOLD = 0.70
 CHIN_FINGER_THRESHOLD = 0.72
+CONFETTI_THRESHOLD = 0.42
 
 app = FastAPI(title="Finger-to-Mouth Monkey Meme")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -66,6 +67,7 @@ async def analyze(websocket: WebSocket) -> None:
 
 class GestureDetector:
     def __init__(self) -> None:
+        self.previous_hand_centers: list[tuple[float, float]] | None = None
         self.face_mesh = mp_face_mesh.FaceMesh(
             static_image_mode=False,
             max_num_faces=1,
@@ -75,7 +77,7 @@ class GestureDetector:
         )
         self.hands = mp_hands.Hands(
             static_image_mode=False,
-            max_num_hands=1,
+            max_num_hands=2,
             model_complexity=0,
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5,
@@ -97,39 +99,71 @@ class GestureDetector:
         hand_results = self.hands.process(rgb)
 
         face = extract_face(face_results, width, height)
-        hand = extract_hand(hand_results, width, height)
-        finger_mouth_confidence = compute_finger_mouth_confidence(face, hand, width, height)
-        chin_finger_confidence = compute_chin_finger_confidence(face, hand, width, height)
+        hands = extract_hands(hand_results, width, height)
+        finger_mouth_confidence = compute_finger_mouth_confidence(face, hands, width, height)
+        chin_finger_confidence = compute_chin_finger_confidence(face, hands, width, height)
+        confetti_confidence = self.compute_confetti_confidence(hands, height)
         speed_face_confidence = compute_speed_face_confidence(face)
         expression_active = speed_face_confidence >= SPEED_FACE_THRESHOLD
         finger_mouth_active = finger_mouth_confidence >= FINGER_MOUTH_THRESHOLD
         chin_finger_active = chin_finger_confidence >= CHIN_FINGER_THRESHOLD
-        active_image = (
-            "speedFace"
-            if expression_active
-            else "monkey"
-            if finger_mouth_active
-            else "mogging"
-            if chin_finger_active
-            else None
+        confetti_active = confetti_confidence >= CONFETTI_THRESHOLD
+        active_image = strongest_active_image(
+            [
+                ("monkey", finger_mouth_confidence, FINGER_MOUTH_THRESHOLD),
+                ("speedFace", speed_face_confidence, SPEED_FACE_THRESHOLD),
+                ("mogging", chin_finger_confidence, CHIN_FINGER_THRESHOLD),
+            ]
         )
 
         return {
             "faceBox": face["box"] if face else None,
-            "handBox": hand["box"] if hand else None,
-            "confidence": max(finger_mouth_confidence, speed_face_confidence, chin_finger_confidence),
+            "handBox": hands[0]["box"] if hands else None,
+            "handBoxes": [hand["box"] for hand in hands],
+            "confidence": max(
+                finger_mouth_confidence,
+                speed_face_confidence,
+                chin_finger_confidence,
+                confetti_confidence,
+            ),
             "fingerMouthConfidence": finger_mouth_confidence,
             "speedFaceConfidence": speed_face_confidence,
             "chinFingerConfidence": chin_finger_confidence,
-            "gestureActive": finger_mouth_active or expression_active or chin_finger_active,
+            "confettiConfidence": confetti_confidence,
+            "gestureActive": finger_mouth_active or expression_active or chin_finger_active or confetti_active,
             "activeImage": active_image,
+            "confettiActive": confetti_active,
+            "confettiIntensity": confetti_confidence,
             "fingerMouthThreshold": FINGER_MOUTH_THRESHOLD,
             "speedFaceThreshold": SPEED_FACE_THRESHOLD,
             "chinFingerThreshold": CHIN_FINGER_THRESHOLD,
+            "confettiThreshold": CONFETTI_THRESHOLD,
             "monkeyImageAvailable": MONKEY_IMAGE.exists(),
             "speedFaceImageAvailable": SPEED_FACE_IMAGE.exists(),
             "moggingImageAvailable": MOGGING_IMAGE.exists(),
         }
+
+    def compute_confetti_confidence(self, hands: list[dict[str, Any]], height: int) -> float:
+        centers = sorted([hand["center"] for hand in hands], key=lambda center: center[0])
+        if len(centers) < 2:
+            self.previous_hand_centers = centers
+            return 0.0
+
+        if not self.previous_hand_centers or len(self.previous_hand_centers) < 2:
+            self.previous_hand_centers = centers
+            return 0.0
+
+        left_delta = centers[0][1] - self.previous_hand_centers[0][1]
+        right_delta = centers[1][1] - self.previous_hand_centers[1][1]
+        self.previous_hand_centers = centers
+
+        moving_opposite = left_delta * right_delta < 0
+        normalized_speed = (abs(left_delta) + abs(right_delta)) / max(height, 1)
+        if not moving_opposite:
+            return 0.0
+
+        confidence = normalized_score(normalized_speed, low=0.025, high=0.14)
+        return round(max(0.0, min(1.0, confidence)), 2)
 
 
 def decode_frame(payload: str) -> np.ndarray | None:
@@ -150,15 +184,20 @@ def empty_result() -> dict[str, Any]:
     return {
         "faceBox": None,
         "handBox": None,
+        "handBoxes": [],
         "confidence": 0.0,
         "fingerMouthConfidence": 0.0,
         "speedFaceConfidence": 0.0,
         "chinFingerConfidence": 0.0,
+        "confettiConfidence": 0.0,
         "gestureActive": False,
         "activeImage": None,
+        "confettiActive": False,
+        "confettiIntensity": 0.0,
         "fingerMouthThreshold": FINGER_MOUTH_THRESHOLD,
         "speedFaceThreshold": SPEED_FACE_THRESHOLD,
         "chinFingerThreshold": CHIN_FINGER_THRESHOLD,
+        "confettiThreshold": CONFETTI_THRESHOLD,
         "monkeyImageAvailable": MONKEY_IMAGE.exists(),
         "speedFaceImageAvailable": SPEED_FACE_IMAGE.exists(),
         "moggingImageAvailable": MOGGING_IMAGE.exists(),
@@ -190,65 +229,77 @@ def extract_face(results: Any, width: int, height: int) -> dict[str, Any] | None
     }
 
 
-def extract_hand(results: Any, width: int, height: int) -> dict[str, Any] | None:
+def extract_hands(results: Any, width: int, height: int) -> list[dict[str, Any]]:
     if not results.multi_hand_landmarks:
-        return None
+        return []
 
-    landmarks = results.multi_hand_landmarks[0].landmark
-    xs = [landmark.x * width for landmark in landmarks]
-    ys = [landmark.y * height for landmark in landmarks]
+    hands = []
+    for hand_landmarks in results.multi_hand_landmarks:
+        landmarks = hand_landmarks.landmark
+        xs = [landmark.x * width for landmark in landmarks]
+        ys = [landmark.y * height for landmark in landmarks]
 
-    index_tip = landmarks[8]
-    fingertip = point_xy(index_tip, width, height)
+        index_tip = landmarks[8]
+        fingertip = point_xy(index_tip, width, height)
+        center = average_point(list(zip(xs, ys)))
 
-    return {
-        "box": square_box(min(xs), min(ys), max(xs), max(ys), width, height),
-        "fingertip": fingertip,
-    }
+        hands.append(
+            {
+                "box": square_box(min(xs), min(ys), max(xs), max(ys), width, height),
+                "fingertip": fingertip,
+                "center": center,
+            }
+        )
+
+    return hands
 
 
 def compute_finger_mouth_confidence(
     face: dict[str, Any] | None,
-    hand: dict[str, Any] | None,
+    hands: list[dict[str, Any]],
     width: int,
     height: int,
 ) -> float:
-    if not face or not hand:
+    if not face or not hands:
         return 0.0
 
     mouth_x, mouth_y = face["mouth"]
-    finger_x, finger_y = hand["fingertip"]
-    distance = math.hypot(finger_x - mouth_x, finger_y - mouth_y)
-
     frame_scale = math.hypot(width, height)
     close_distance = frame_scale * 0.035
     far_distance = frame_scale * 0.16
-    confidence = 1.0 - ((distance - close_distance) / (far_distance - close_distance))
+    confidence = 0.0
+    for hand in hands:
+        finger_x, finger_y = hand["fingertip"]
+        distance = math.hypot(finger_x - mouth_x, finger_y - mouth_y)
+        hand_confidence = 1.0 - ((distance - close_distance) / (far_distance - close_distance))
+        confidence = max(confidence, hand_confidence)
 
     return round(max(0.0, min(1.0, confidence)), 2)
 
 
 def compute_chin_finger_confidence(
     face: dict[str, Any] | None,
-    hand: dict[str, Any] | None,
+    hands: list[dict[str, Any]],
     width: int,
     height: int,
 ) -> float:
-    if not face or not hand:
+    if not face or not hands:
         return 0.0
 
-    finger = hand["fingertip"]
     mouth_x, mouth_y = face["mouth"]
-    mouth_distance = math.hypot(finger[0] - mouth_x, finger[1] - mouth_y)
-    distance = min(math.hypot(finger[0] - point[0], finger[1] - point[1]) for point in face["chinPoints"])
-
     frame_scale = math.hypot(width, height)
-    if mouth_distance < frame_scale * 0.10:
-        return 0.0
-
     close_distance = frame_scale * 0.03
     far_distance = frame_scale * 0.10
-    confidence = 1.0 - ((distance - close_distance) / (far_distance - close_distance))
+    confidence = 0.0
+    for hand in hands:
+        finger = hand["fingertip"]
+        mouth_distance = math.hypot(finger[0] - mouth_x, finger[1] - mouth_y)
+        if mouth_distance < frame_scale * 0.10:
+            continue
+
+        distance = min(math.hypot(finger[0] - point[0], finger[1] - point[1]) for point in face["chinPoints"])
+        hand_confidence = 1.0 - ((distance - close_distance) / (far_distance - close_distance))
+        confidence = max(confidence, hand_confidence)
 
     return round(max(0.0, min(1.0, confidence)), 2)
 
@@ -259,9 +310,9 @@ def compute_speed_face_confidence(face: dict[str, Any] | None) -> float:
 
     metrics = face["metrics"]
     eye_score = normalized_inverse(metrics["eye_open"], low=0.075, high=0.16)
-    mouth_closed_score = normalized_inverse(metrics["mouth_open"], low=0.015, high=0.06)
-    mouth_narrow_score = normalized_inverse(metrics["mouth_width"], low=0.22, high=0.40)
-    confidence = min(eye_score, (mouth_closed_score * 0.50) + (mouth_narrow_score * 0.50))
+    mouth_closed_score = normalized_inverse(metrics["mouth_open"], low=0.012, high=0.045)
+    mouth_circle_score = centered_score(metrics["mouth_outer_roundness"], target=0.72, tolerance=0.22)
+    confidence = min(eye_score, mouth_closed_score, mouth_circle_score)
 
     return round(max(0.0, min(1.0, confidence)), 2)
 
@@ -274,11 +325,13 @@ def extract_face_metrics(landmarks: Any, width: int, height: int) -> dict[str, f
     right_eye_open = distance_px(landmarks[386], landmarks[374], width, height)
     mouth_width = distance_px(landmarks[61], landmarks[291], width, height)
     mouth_open = distance_px(landmarks[13], landmarks[14], width, height)
+    mouth_outer_height = distance_px(landmarks[0], landmarks[17], width, height)
+    mouth_outer_roundness = mouth_outer_height / max(mouth_width, 1.0)
 
     return {
         "eye_open": ((left_eye_open + right_eye_open) / 2) / face_width,
         "mouth_open": mouth_open / face_width,
-        "mouth_width": mouth_width / face_width,
+        "mouth_outer_roundness": mouth_outer_roundness,
     }
 
 
@@ -300,6 +353,23 @@ def normalized_score(value: float, low: float, high: float) -> float:
     if high <= low:
         return 0.0
     return max(0.0, min(1.0, (value - low) / (high - low)))
+
+
+def centered_score(value: float, target: float, tolerance: float) -> float:
+    if tolerance <= 0:
+        return 0.0
+    return max(0.0, min(1.0, 1.0 - (abs(value - target) / tolerance)))
+
+
+def strongest_active_image(candidates: list[tuple[str, float, float]]) -> str | None:
+    active_candidates = [
+        (name, confidence)
+        for name, confidence, threshold in candidates
+        if confidence >= threshold
+    ]
+    if not active_candidates:
+        return None
+    return max(active_candidates, key=lambda candidate: candidate[1])[0]
 
 
 def average_point(points: list[tuple[float, float]]) -> tuple[float, float]:

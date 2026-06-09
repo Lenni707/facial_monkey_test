@@ -94,6 +94,43 @@ body {
   text-transform: lowercase;
 }
 
+.confetti-layer {
+  --confetti-intensity: 0;
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+body[data-confetti="active"] .confetti-layer {
+  opacity: calc(0.25 + var(--confetti-intensity) * 0.75);
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -16px;
+  left: var(--x);
+  font-size: calc(18px + var(--confetti-intensity) * 18px);
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  animation: confetti-fall calc(3.8s - var(--confetti-intensity) * 1.8s) linear infinite;
+  animation-delay: var(--delay);
+}
+
+@keyframes confetti-fall {
+  from {
+    transform: translate3d(0, -20px, 0) rotate(0deg);
+  }
+
+  to {
+    transform: translate3d(var(--drift), calc(100vh + 40px), 0) rotate(var(--spin));
+  }
+}
+
 .reaction-image {
   display: none;
   width: 100%;

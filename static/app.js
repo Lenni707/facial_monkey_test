@@ -4,6 +4,7 @@ const confidenceLabel = document.getElementById("confidence");
 const cameraStatus = document.getElementById("cameraStatus");
 const memePanel = document.querySelector(".meme-panel");
 const reactionLabel = document.getElementById("reactionLabel");
+const confettiLayer = document.getElementById("confettiLayer");
 const monkeyImage = document.getElementById("monkeyImage");
 const speedFaceImage = document.getElementById("speedFaceImage");
 const moggingImage = document.getElementById("moggingImage");
@@ -18,6 +19,7 @@ let frameTimer = null;
 let streamReady = false;
 
 async function start() {
+  createConfetti();
   await refreshAssetStatus();
   await startCamera();
   connectSocket();
@@ -87,14 +89,31 @@ function sendFrame() {
 function updateUi(result) {
   confidenceLabel.textContent = Number(result.confidence || 0).toFixed(2);
   memePanel.dataset.activeImage = result.activeImage || "";
-  reactionLabel.textContent = reactionWord(result.activeImage);
+  document.body.dataset.confetti = result.confettiActive ? "active" : "";
+  confettiLayer.style.setProperty("--confetti-intensity", String(Number(result.confettiIntensity || 0).toFixed(2)));
+  reactionLabel.textContent = reactionWord(result.activeImage, result.confettiActive);
   monkeyImage.classList.toggle("available", Boolean(result.monkeyImageAvailable));
   speedFaceImage.classList.toggle("available", Boolean(result.speedFaceImageAvailable));
   moggingImage.classList.toggle("available", Boolean(result.moggingImageAvailable));
   drawOverlay(result);
 }
 
-function reactionWord(activeImage) {
+function createConfetti() {
+  const colors = ["#ff4f81", "#ffd166", "#06d6a0", "#4cc9f0", "#f72585", "#f8f9fa"];
+  for (let index = 0; index < 67; index += 1) {
+    const piece = document.createElement("span");
+    piece.className = "confetti-piece";
+    piece.textContent = index % 2 === 0 ? "6" : "7";
+    piece.style.setProperty("--x", `${(index * 37) % 100}%`);
+    piece.style.setProperty("--delay", `${-((index * 0.137) % 2.4)}s`);
+    piece.style.setProperty("--drift", `${((index % 9) - 4) * 9}px`);
+    piece.style.setProperty("--spin", `${180 + (index % 7) * 45}deg`);
+    piece.style.color = colors[index % colors.length];
+    confettiLayer.appendChild(piece);
+  }
+}
+
+function reactionWord(activeImage, confettiActive) {
   if (activeImage === "speedFace") {
     return "speed";
   }
@@ -103,6 +122,9 @@ function reactionWord(activeImage) {
   }
   if (activeImage === "mogging") {
     return "mogging";
+  }
+  if (confettiActive) {
+    return "confetti";
   }
   return "none";
 }
@@ -129,7 +151,10 @@ function drawOverlay(result) {
   }
 
   drawBox(result.faceBox, "#43d67d", "Head", sourceWidth, sourceHeight, bounds);
-  drawBox(result.handBox, "#ffcc33", "Hand", sourceWidth, sourceHeight, bounds);
+  const handBoxes = result.handBoxes || (result.handBox ? [result.handBox] : []);
+  handBoxes.forEach((box, index) => {
+    drawBox(box, "#ffcc33", index === 0 ? "Hand" : "Hand", sourceWidth, sourceHeight, bounds);
+  });
 }
 
 function drawBox(box, color, label, sourceWidth, sourceHeight, bounds) {
