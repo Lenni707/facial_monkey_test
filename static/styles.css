@@ -81,7 +81,7 @@ body {
   padding: 24px;
 }
 
-#monkeyImage {
+.reaction-image {
   display: none;
   width: 100%;
   height: 100%;
@@ -109,15 +109,18 @@ body {
   font-size: 14px;
 }
 
-.meme-panel.active #monkeyImage.available {
+.meme-panel[data-active-image="monkey"] #monkeyImage.available,
+.meme-panel[data-active-image="speedFace"] #speedFaceImage.available {
   display: block;
 }
 
-.meme-panel.active #monkeyImage.available + .placeholder {
+.meme-panel[data-active-image="monkey"] #monkeyImage.available ~ .placeholder,
+.meme-panel[data-active-image="speedFace"] #speedFaceImage.available ~ .placeholder {
   display: none;
 }
 
-.meme-panel.active #monkeyImage:not(.available) + .placeholder strong::after {
+.meme-panel[data-active-image="monkey"] #monkeyImage:not(.available) ~ .placeholder strong::after,
+.meme-panel[data-active-image="speedFace"] #speedFaceImage:not(.available) ~ .placeholder strong::after {
   content: " - detected";
 }
 

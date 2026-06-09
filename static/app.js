@@ -4,6 +4,7 @@ const confidenceLabel = document.getElementById("confidence");
 const cameraStatus = document.getElementById("cameraStatus");
 const memePanel = document.querySelector(".meme-panel");
 const monkeyImage = document.getElementById("monkeyImage");
+const speedFaceImage = document.getElementById("speedFaceImage");
 
 const drawCanvas = document.createElement("canvas");
 const drawContext = drawCanvas.getContext("2d");
@@ -25,6 +26,7 @@ async function refreshAssetStatus() {
   const response = await fetch("/api/asset-status");
   const status = await response.json();
   monkeyImage.classList.toggle("available", status.monkeyImageAvailable);
+  speedFaceImage.classList.toggle("available", status.speedFaceImageAvailable);
 }
 
 async function startCamera() {
@@ -81,8 +83,9 @@ function sendFrame() {
 
 function updateUi(result) {
   confidenceLabel.textContent = Number(result.confidence || 0).toFixed(2);
-  memePanel.classList.toggle("active", Boolean(result.gestureActive));
+  memePanel.dataset.activeImage = result.activeImage || "";
   monkeyImage.classList.toggle("available", Boolean(result.monkeyImageAvailable));
+  speedFaceImage.classList.toggle("available", Boolean(result.speedFaceImageAvailable));
   drawOverlay(result);
 }
 

@@ -6,6 +6,8 @@
 - Added the FastAPI/WebSocket backend.
 - Added the browser webcam UI with left camera pane, right meme pane, detection boxes, and confidence display.
 - Added the `assets/` folder and switched the meme display to `assets/thinking_monkey.jpeg`.
+- Added a second facial-expression trigger for `assets/speed_face.png`.
+- Added `assets/speed_face.png`.
 - Added Dockerfile and Docker Compose configuration.
 - Verified `docker compose build` succeeds after Docker was started.
 - Started the app container with `docker compose up -d`.
@@ -17,5 +19,7 @@
 
 ## Future
 - Replace `assets/thinking_monkey.jpeg` if a different meme image is wanted later.
+- Replace `assets/speed_face.png` if a different expression image is wanted later.
 - Open the app in a browser and verify webcam permissions.
 - Tune the finger-to-mouth confidence threshold if needed.
+- Tune the facial-expression confidence threshold if needed.
