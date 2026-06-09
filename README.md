@@ -1,0 +1,21 @@
+# Facial Monkey Test
+
+A containerized Python webcam app that shows your camera feed on the left and displays `assets/monkey_thinking.png` on the right when your finger is detected near your mouth.
+
+## Run
+
+```bash
+docker compose up --build
+```
+
+Open http://localhost:8000 and allow webcam access in the browser.
+
+## Meme Asset
+
+Add your image here:
+
+```text
+assets/monkey_thinking.png
+```
+
+Until that file exists, the app shows a placeholder in the right pane.
