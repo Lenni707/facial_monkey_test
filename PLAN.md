@@ -9,6 +9,7 @@
 - Added a second facial-expression trigger for `assets/speed_face.png`.
 - Added `assets/speed_face.png`.
 - Lowered the speed-face threshold to `0.57`.
+- Changed the speed-face criteria to closed eyes plus oval/circle mouth shape.
 - Added a chin/jaw index-finger trigger for `assets/mogger.jpeg`.
 - Added Dockerfile and Docker Compose configuration.
 - Verified `docker compose build` succeeds after Docker was started.

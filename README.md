@@ -3,7 +3,7 @@
 A containerized Python webcam app that shows your camera feed on the left and displays a reaction image on the right:
 
 - `assets/thinking_monkey.jpeg` when your finger is detected near your mouth.
-- `assets/speed_face.png` when your eyes are slightly closed, lips are pushed forward, and eyebrows are pushed down.
+- `assets/speed_face.png` when your eyes are closed and your lips form an oval or circle shape.
 - `assets/mogger.jpeg` when your index finger is detected along your chin or either side of your jaw.
 
 ## Run

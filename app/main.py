@@ -253,10 +253,10 @@ def compute_speed_face_confidence(face: dict[str, Any] | None) -> float:
         return 0.0
 
     metrics = face["metrics"]
-    eye_score = normalized_inverse(metrics["eye_open"], low=0.105, high=0.205)
-    mouth_score = normalized_inverse(metrics["mouth_width"], low=0.235, high=0.405)
-    brow_score = normalized_inverse(metrics["brow_lift"], low=0.08, high=0.19)
-    confidence = (eye_score * 0.38) + (mouth_score * 0.34) + (brow_score * 0.28)
+    eye_score = normalized_inverse(metrics["eye_open"], low=0.08, high=0.18)
+    mouth_open_score = normalized_score(metrics["mouth_open"], low=0.045, high=0.14)
+    mouth_round_score = normalized_score(metrics["mouth_roundness"], low=0.22, high=0.48)
+    confidence = (eye_score * 0.50) + (mouth_open_score * 0.25) + (mouth_round_score * 0.25)
 
     return round(max(0.0, min(1.0, confidence)), 2)
 
@@ -268,14 +268,13 @@ def extract_face_metrics(landmarks: Any, width: int, height: int) -> dict[str, f
     left_eye_open = distance_px(landmarks[159], landmarks[145], width, height)
     right_eye_open = distance_px(landmarks[386], landmarks[374], width, height)
     mouth_width = distance_px(landmarks[61], landmarks[291], width, height)
-
-    left_brow_eye_gap = distance_px(landmarks[105], landmarks[159], width, height)
-    right_brow_eye_gap = distance_px(landmarks[334], landmarks[386], width, height)
+    mouth_open = distance_px(landmarks[13], landmarks[14], width, height)
+    mouth_roundness = mouth_open / max(mouth_width, 1.0)
 
     return {
         "eye_open": ((left_eye_open + right_eye_open) / 2) / face_width,
-        "mouth_width": mouth_width / face_width,
-        "brow_lift": ((left_brow_eye_gap + right_brow_eye_gap) / 2) / face_width,
+        "mouth_open": mouth_open / face_width,
+        "mouth_roundness": mouth_roundness,
     }
 
 
@@ -291,6 +290,12 @@ def normalized_inverse(value: float, low: float, high: float) -> float:
     if high <= low:
         return 0.0
     return max(0.0, min(1.0, 1.0 - ((value - low) / (high - low))))
+
+
+def normalized_score(value: float, low: float, high: float) -> float:
+    if high <= low:
+        return 0.0
+    return max(0.0, min(1.0, (value - low) / (high - low)))
 
 
 def average_point(points: list[tuple[float, float]]) -> tuple[float, float]:
