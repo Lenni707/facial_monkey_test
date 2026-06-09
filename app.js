@@ -10,6 +10,7 @@ const confettiLayer = document.getElementById("confettiLayer");
 const monkeyImage = document.getElementById("monkeyImage");
 const speedFaceImage = document.getElementById("speedFaceImage");
 const moggingImage = document.getElementById("moggingImage");
+const silencedImage = document.getElementById("silencedImage");
 
 const overlayContext = overlay.getContext("2d");
 
@@ -17,6 +18,7 @@ const FINGER_MOUTH_THRESHOLD = 0.70;
 const SPEED_FACE_THRESHOLD = 0.70;
 const CHIN_FINGER_THRESHOLD = 0.72;
 const CONFETTI_THRESHOLD = 0.42;
+const SILENCED_THRESHOLD = 0.70;
 
 let faceLandmarker = null;
 let handLandmarker = null;
@@ -28,6 +30,7 @@ let lastVideoTime = -1;
 let monkeyImageAvailable = false;
 let speedFaceImageAvailable = false;
 let moggingImageAvailable = false;
+let silencedImageAvailable = false;
 
 // Confetti state variables
 let lastConfettiTriggerTime = 0;
@@ -35,7 +38,6 @@ let maxConfettiIntensityInSession = 0;
 const CONFETTI_MIN_DURATION = 2000; // 2 seconds minimum play window
 
 async function start() {
-  createConfetti();
   await refreshAssetStatus();
   await startCamera();
   await initMediaPipe();
@@ -57,10 +59,12 @@ async function refreshAssetStatus() {
     monkeyImageAvailable = await checkAsset("assets/thinking_monkey.jpeg");
     speedFaceImageAvailable = await checkAsset("assets/speed_face.png");
     moggingImageAvailable = await checkAsset("assets/mogger.jpeg");
+    silencedImageAvailable = await checkAsset("assets/psst.png");
 
     monkeyImage.classList.toggle("available", monkeyImageAvailable);
     speedFaceImage.classList.toggle("available", speedFaceImageAvailable);
     moggingImage.classList.toggle("available", moggingImageAvailable);
+    silencedImage.classList.toggle("available", silencedImageAvailable);
   } catch (error) {
     console.error("Error checking assets client-side:", error);
   }
@@ -147,43 +151,54 @@ function runDetection() {
 
   const fingerMouthConfidence = computeFingerMouthConfidence(face, hands, width, height);
   const chinFingerConfidence = computeChinFingerConfidence(face, hands, width, height);
-  const rawConfettiConfidence = computeConfettiConfidence(hands, height);
+  const silencedConfidence = computeSilencedConfidence(face, hands, width, height);
+  const confettiScores = computeConfettiConfidence(hands, height);
   const speedFaceConfidence = computeSpeedFaceConfidence(face);
 
   // Apply stateful lock to keep confetti active for a minimum of 2 seconds once triggered
   const now = performance.now();
-  if (rawConfettiConfidence >= CONFETTI_THRESHOLD) {
-    lastConfettiTriggerTime = now;
-    // Boost raw confidence to at least 0.85 for a clean, thick shower
-    maxConfettiIntensityInSession = Math.max(maxConfettiIntensityInSession, rawConfettiConfidence, 0.85);
-  }
-
   let confettiConfidence = 0.0;
   let confettiActive = false;
   const timeSinceTrigger = now - lastConfettiTriggerTime;
+
   if (timeSinceTrigger < CONFETTI_MIN_DURATION) {
+    // If already playing, keep it alive if user maintains the lighter persistence threshold
+    if (confettiScores.persist >= CONFETTI_THRESHOLD) {
+      lastConfettiTriggerTime = now;
+      maxConfettiIntensityInSession = Math.max(maxConfettiIntensityInSession, confettiScores.persist, 0.85);
+    }
     confettiActive = true;
-    // Decays smoothly from peak down to 30% of peak at 2 seconds
     const progress = timeSinceTrigger / CONFETTI_MIN_DURATION;
     confettiConfidence = maxConfettiIntensityInSession * (1.0 - progress * 0.7);
   } else {
-    maxConfettiIntensityInSession = 0.0;
+    // If not playing, require the higher trigger threshold to start
+    if (confettiScores.trigger >= CONFETTI_THRESHOLD) {
+      lastConfettiTriggerTime = now;
+      maxConfettiIntensityInSession = Math.max(confettiScores.trigger, 0.85);
+      confettiActive = true;
+      confettiConfidence = maxConfettiIntensityInSession;
+    } else {
+      maxConfettiIntensityInSession = 0.0;
+    }
   }
 
   const fingerMouthActive = fingerMouthConfidence >= FINGER_MOUTH_THRESHOLD;
   const speedFaceActive = speedFaceConfidence >= SPEED_FACE_THRESHOLD;
   const chinFingerActive = chinFingerConfidence >= CHIN_FINGER_THRESHOLD;
+  const silencedActive = silencedConfidence >= SILENCED_THRESHOLD;
 
   const activeImage = strongestActiveImage([
     ["monkey", fingerMouthConfidence, FINGER_MOUTH_THRESHOLD],
     ["speedFace", speedFaceConfidence, SPEED_FACE_THRESHOLD],
-    ["mogging", chinFingerConfidence, CHIN_FINGER_THRESHOLD]
+    ["mogging", chinFingerConfidence, CHIN_FINGER_THRESHOLD],
+    ["silenced", silencedConfidence, SILENCED_THRESHOLD]
   ]);
 
   const maxConfidence = Math.max(
     fingerMouthConfidence,
     speedFaceConfidence,
     chinFingerConfidence,
+    silencedConfidence,
     confettiConfidence
   );
 
@@ -195,14 +210,16 @@ function runDetection() {
     fingerMouthConfidence,
     speedFaceConfidence,
     chinFingerConfidence,
+    silencedConfidence,
     confettiConfidence,
-    gestureActive: fingerMouthActive || speedFaceActive || chinFingerActive || confettiActive,
+    gestureActive: fingerMouthActive || speedFaceActive || chinFingerActive || silencedActive || confettiActive,
     activeImage,
     confettiActive,
     confettiIntensity: confettiConfidence,
     monkeyImageAvailable,
     speedFaceImageAvailable,
-    moggingImageAvailable
+    moggingImageAvailable,
+    silencedImageAvailable
   };
 
   updateUi(latestResult);
@@ -269,11 +286,13 @@ function extractHands(results, width, height) {
     const indexTip = landmarks[8];
     const fingertip = [indexTip.x * width, indexTip.y * height];
     const center = averagePoint(landmarks.map(lm => [lm.x * width, lm.y * height]));
+    const indexKnuckle = [landmarks[6].x * width, landmarks[6].y * height];
 
     hands.push({
       box: squareBox(Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys), width, height),
       fingertip: fingertip,
-      center: center
+      center: center,
+      indexKnuckle: indexKnuckle
     });
   }
   return hands;
@@ -355,6 +374,45 @@ function computeChinFingerConfidence(face, hands, width, height) {
   return Number(Math.max(0.0, Math.min(1.0, confidence)).toFixed(2));
 }
 
+function computeSilencedConfidence(face, hands, width, height) {
+  if (!face || hands.length === 0) {
+    return 0.0;
+  }
+
+  const [mouthX, mouthY] = face.mouth;
+  const mouthWidth = face.mouthWidth;
+  let confidence = 0.0;
+
+  for (const hand of hands) {
+    if (!hand.indexKnuckle) continue;
+    const [fingerX, fingerY] = hand.fingertip;
+    const [knuckleX, knuckleY] = hand.indexKnuckle;
+
+    const dxTip = Math.abs(fingerX - mouthX);
+
+    // Is the index finger held vertically? (X of tip and joint are close)
+    const isVertical = Math.abs(fingerX - knuckleX) < mouthWidth * 0.40;
+    
+    // Is the fingertip pointing up? (Y of tip is less than Y of joint)
+    const isPointingUp = fingerY < knuckleY;
+    
+    // Is the finger horizontally aligned with the mouth center?
+    const isCentered = dxTip < mouthWidth * 0.55;
+    
+    // Does the finger overlap the mouth center vertically?
+    // (Fingertip is above mouth center, knuckle joint is below mouth center)
+    const overlapsMouthVertically = fingerY < mouthY + mouthWidth * 0.1 && knuckleY > mouthY - mouthWidth * 0.1;
+
+    if (isVertical && isPointingUp && isCentered && overlapsMouthVertically) {
+      // Confidence is higher the closer the finger is to the exact horizontal center of the mouth
+      const handConfidence = 1.0 - (dxTip / (mouthWidth * 0.55));
+      confidence = Math.max(confidence, handConfidence);
+    }
+  }
+
+  return Number(Math.max(0.0, Math.min(1.0, confidence)).toFixed(2));
+}
+
 function computeSpeedFaceConfidence(face) {
   if (!face) {
     return 0.0;
@@ -373,27 +431,49 @@ function computeConfettiConfidence(hands, height) {
   const centers = hands.map(hand => hand.center).sort((a, b) => a[0] - b[0]);
   if (centers.length < 2) {
     previousHandCenters = centers;
-    return 0.0;
+    return { trigger: 0.0, persist: 0.0 };
   }
 
   if (!previousHandCenters || previousHandCenters.length < 2) {
     previousHandCenters = centers;
-    return 0.0;
+    return { trigger: 0.0, persist: 0.0 };
   }
 
   const leftDelta = centers[0][1] - previousHandCenters[0][1];
   const rightDelta = centers[1][1] - previousHandCenters[1][1];
   previousHandCenters = centers;
 
+  // Must be moving in opposite vertical directions (asynchronous up/down)
   const movingOpposite = leftDelta * rightDelta < 0;
-  const normalizedSpeed = (Math.abs(leftDelta) + Math.abs(rightDelta)) / Math.max(height, 1);
   if (!movingOpposite) {
-    return 0.0;
+    return { trigger: 0.0, persist: 0.0 };
   }
 
-  // More sensitive thresholds (0.01, 0.08) for faster detection
-  const confidence = normalizedScore(normalizedSpeed, 0.01, 0.08);
-  return Number(Math.max(0.0, Math.min(1.0, confidence)).toFixed(2));
+  const leftSpeed = Math.abs(leftDelta);
+  const rightSpeed = Math.abs(rightDelta);
+  const totalSpeed = leftSpeed + rightSpeed;
+
+  // Ensure both hands are actively moving to filter out single-hand noise or jitters
+  // Trigger speed requires each hand to move at least 1.8% of height per frame
+  // Persist speed is lower to allow continuous light waving
+  const minHandSpeedTrigger = height * 0.018;
+  const minHandSpeedPersist = height * 0.007;
+
+  let triggerConfidence = 0.0;
+  let persistConfidence = 0.0;
+
+  if (leftSpeed >= minHandSpeedTrigger && rightSpeed >= minHandSpeedTrigger) {
+    triggerConfidence = normalizedScore(totalSpeed / height, 0.035, 0.11);
+  }
+
+  if (leftSpeed >= minHandSpeedPersist && rightSpeed >= minHandSpeedPersist) {
+    persistConfidence = normalizedScore(totalSpeed / height, 0.012, 0.07);
+  }
+
+  return {
+    trigger: Number(Math.max(0.0, Math.min(1.0, triggerConfidence)).toFixed(2)),
+    persist: Number(Math.max(0.0, Math.min(1.0, persistConfidence)).toFixed(2))
+  };
 }
 
 function normalizedInverse(value, low, high) {
@@ -457,35 +537,60 @@ function updateUi(result) {
   confidenceLabel.textContent = Number(result.confidence || 0).toFixed(2);
   memePanel.dataset.activeImage = result.activeImage || "";
   confettiLayer.style.setProperty("--confetti-intensity", String(Number(result.confettiIntensity || 0).toFixed(2)));
-  updateConfetti(result.confettiActive);
+  updateConfetti(result.confettiActive, result.confettiIntensity);
   reactionLabel.textContent = reactionWord(result.activeImage, result.confettiActive);
   monkeyImage.classList.toggle("available", Boolean(result.monkeyImageAvailable));
   speedFaceImage.classList.toggle("available", Boolean(result.speedFaceImageAvailable));
   moggingImage.classList.toggle("available", Boolean(result.moggingImageAvailable));
+  silencedImage.classList.toggle("available", Boolean(result.silencedImageAvailable));
   drawOverlay(result);
 }
 
-function updateConfetti(active) {
+function updateConfetti(active, intensity) {
   if (active) {
     document.body.dataset.confetti = "active";
+    // Spawn particles dynamically: faster speed -> more particles (up to 3 particles per frame at peak intensity)
+    const spawnChance = intensity * 1.5; 
+    const numToSpawn = Math.floor(spawnChance) + (Math.random() < (spawnChance % 1) ? 1 : 0);
+    for (let i = 0; i < numToSpawn; i++) {
+      spawnSingleConfetti(intensity);
+    }
   } else {
     document.body.dataset.confetti = "";
   }
 }
 
-function createConfetti() {
+function spawnSingleConfetti(intensity) {
+  const piece = document.createElement("span");
+  piece.className = "confetti-piece-dynamic";
+  piece.textContent = Math.random() < 0.5 ? "6" : "7";
+
+  const x = Math.random() * 100;
+  const drift = (Math.random() - 0.5) * 120;
+  const spin = 180 + Math.random() * 360;
+  
+  // Scales particle size with current hand motion speed
+  const size = 18 + Math.random() * 8 + intensity * 16; 
+
+  piece.style.setProperty("--x", `${x}%`);
+  piece.style.setProperty("--drift", `${drift}px`);
+  piece.style.setProperty("--spin", `${spin}deg`);
+  piece.style.fontSize = `${size}px`;
+
   const colors = ["#ff4f81", "#ffd166", "#06d6a0", "#4cc9f0", "#f72585", "#f8f9fa"];
-  for (let index = 0; index < 67; index += 1) {
-    const piece = document.createElement("span");
-    piece.className = "confetti-piece";
-    piece.textContent = index % 2 === 0 ? "6" : "7";
-    piece.style.setProperty("--x", `${(index * 37) % 100}%`);
-    piece.style.setProperty("--delay", `${-((index * 0.137) % 2.4)}s`);
-    piece.style.setProperty("--drift", `${((index % 9) - 4) * 9}px`);
-    piece.style.setProperty("--spin", `${180 + (index % 7) * 45}deg`);
-    piece.style.color = colors[index % colors.length];
-    confettiLayer.appendChild(piece);
-  }
+  piece.style.color = colors[Math.floor(Math.random() * colors.length)];
+
+  // Faster hand speed makes the particles fall faster
+  const baseDuration = 2.5 + Math.random() * 1.5; 
+  const duration = baseDuration / (0.4 + intensity * 0.8);
+  piece.style.animation = `confetti-fall ${duration}s ease-in forwards`;
+
+  // Clean up particle from DOM when it hits the bottom
+  piece.addEventListener("animationend", () => {
+    piece.remove();
+  });
+
+  confettiLayer.appendChild(piece);
 }
 
 function reactionWord(activeImage, confettiActive) {
@@ -497,6 +602,9 @@ function reactionWord(activeImage, confettiActive) {
   }
   if (activeImage === "mogging") {
     return "mogging";
+  }
+  if (activeImage === "silenced") {
+    return "silenced";
   }
   if (confettiActive) {
     return "confetti";
