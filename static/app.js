@@ -3,6 +3,7 @@ const overlay = document.getElementById("overlay");
 const confidenceLabel = document.getElementById("confidence");
 const cameraStatus = document.getElementById("cameraStatus");
 const memePanel = document.querySelector(".meme-panel");
+const reactionLabel = document.getElementById("reactionLabel");
 const monkeyImage = document.getElementById("monkeyImage");
 const speedFaceImage = document.getElementById("speedFaceImage");
 const moggingImage = document.getElementById("moggingImage");
@@ -86,10 +87,24 @@ function sendFrame() {
 function updateUi(result) {
   confidenceLabel.textContent = Number(result.confidence || 0).toFixed(2);
   memePanel.dataset.activeImage = result.activeImage || "";
+  reactionLabel.textContent = reactionWord(result.activeImage);
   monkeyImage.classList.toggle("available", Boolean(result.monkeyImageAvailable));
   speedFaceImage.classList.toggle("available", Boolean(result.speedFaceImageAvailable));
   moggingImage.classList.toggle("available", Boolean(result.moggingImageAvailable));
   drawOverlay(result);
+}
+
+function reactionWord(activeImage) {
+  if (activeImage === "speedFace") {
+    return "speed";
+  }
+  if (activeImage === "monkey") {
+    return "monkey";
+  }
+  if (activeImage === "mogging") {
+    return "mogging";
+  }
+  return "none";
 }
 
 function resizeOverlay() {

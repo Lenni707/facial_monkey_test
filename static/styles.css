@@ -81,6 +81,19 @@ body {
   padding: 24px;
 }
 
+.reaction-label {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 2;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.68);
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: lowercase;
+}
+
 .reaction-image {
   display: none;
   width: 100%;

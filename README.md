@@ -3,8 +3,10 @@
 A containerized Python webcam app that shows your camera feed on the left and displays a reaction image on the right:
 
 - `assets/thinking_monkey.jpeg` when your finger is detected near your mouth.
-- `assets/speed_face.png` when your eyes are closed and your lips form an oval or circle shape.
-- `assets/mogger.jpeg` when your index finger is detected along your chin or either side of your jaw.
+- `assets/speed_face.png` when your eyes are closed and your lips are closed in a small oval shape.
+- `assets/mogger.jpeg` when your index finger is detected on your lower chin, away from the mouth.
+
+The right pane also shows one word for the current reaction: `none`, `monkey`, `speed`, or `mogging`.
 
 ## Run
 

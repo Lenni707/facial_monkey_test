@@ -10,7 +10,10 @@
 - Added `assets/speed_face.png`.
 - Lowered the speed-face threshold to `0.57`.
 - Changed the speed-face criteria to closed eyes plus oval/circle mouth shape.
+- Updated the speed-face mouth criteria to closed lips in a small oval shape.
 - Added a chin/jaw index-finger trigger for `assets/mogger.jpeg`.
+- Tightened the chin trigger so mouth touches keep showing the monkey image.
+- Added a one-word reaction label in the right pane.
 - Added Dockerfile and Docker Compose configuration.
 - Verified `docker compose build` succeeds after Docker was started.
 - Started the app container with `docker compose up -d`.

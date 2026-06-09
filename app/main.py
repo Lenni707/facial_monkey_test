@@ -23,8 +23,8 @@ MOGGING_IMAGE = ASSETS_DIR / "mogger.jpeg"
 
 FRAME_PREFIX = "data:image/jpeg;base64,"
 FINGER_MOUTH_THRESHOLD = 0.70
-SPEED_FACE_THRESHOLD = 0.57
-CHIN_FINGER_THRESHOLD = 0.68
+SPEED_FACE_THRESHOLD = 0.62
+CHIN_FINGER_THRESHOLD = 0.72
 
 app = FastAPI(title="Finger-to-Mouth Monkey Meme")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -105,12 +105,12 @@ class GestureDetector:
         finger_mouth_active = finger_mouth_confidence >= FINGER_MOUTH_THRESHOLD
         chin_finger_active = chin_finger_confidence >= CHIN_FINGER_THRESHOLD
         active_image = (
-            "mogging"
-            if chin_finger_active
-            else "speedFace"
+            "speedFace"
             if expression_active
             else "monkey"
             if finger_mouth_active
+            else "mogging"
+            if chin_finger_active
             else None
         )
 
@@ -178,7 +178,7 @@ def extract_face(results: Any, width: int, height: int) -> dict[str, Any] | None
     mouth_center = average_point(mouth_points)
     chin_points = [
         point_xy(landmarks[index], width, height)
-        for index in [152, 148, 176, 149, 150, 136, 172, 397, 365, 379, 378, 400, 377]
+        for index in [152, 148, 176, 149, 150, 377, 400, 378, 379]
     ]
     metrics = extract_face_metrics(landmarks, width, height)
 
@@ -238,11 +238,16 @@ def compute_chin_finger_confidence(
         return 0.0
 
     finger = hand["fingertip"]
+    mouth_x, mouth_y = face["mouth"]
+    mouth_distance = math.hypot(finger[0] - mouth_x, finger[1] - mouth_y)
     distance = min(math.hypot(finger[0] - point[0], finger[1] - point[1]) for point in face["chinPoints"])
 
     frame_scale = math.hypot(width, height)
+    if mouth_distance < frame_scale * 0.10:
+        return 0.0
+
     close_distance = frame_scale * 0.03
-    far_distance = frame_scale * 0.13
+    far_distance = frame_scale * 0.10
     confidence = 1.0 - ((distance - close_distance) / (far_distance - close_distance))
 
     return round(max(0.0, min(1.0, confidence)), 2)
@@ -253,10 +258,10 @@ def compute_speed_face_confidence(face: dict[str, Any] | None) -> float:
         return 0.0
 
     metrics = face["metrics"]
-    eye_score = normalized_inverse(metrics["eye_open"], low=0.08, high=0.18)
-    mouth_open_score = normalized_score(metrics["mouth_open"], low=0.045, high=0.14)
-    mouth_round_score = normalized_score(metrics["mouth_roundness"], low=0.22, high=0.48)
-    confidence = (eye_score * 0.50) + (mouth_open_score * 0.25) + (mouth_round_score * 0.25)
+    eye_score = normalized_inverse(metrics["eye_open"], low=0.075, high=0.16)
+    mouth_closed_score = normalized_inverse(metrics["mouth_open"], low=0.015, high=0.06)
+    mouth_narrow_score = normalized_inverse(metrics["mouth_width"], low=0.22, high=0.40)
+    confidence = min(eye_score, (mouth_closed_score * 0.50) + (mouth_narrow_score * 0.50))
 
     return round(max(0.0, min(1.0, confidence)), 2)
 
@@ -269,12 +274,11 @@ def extract_face_metrics(landmarks: Any, width: int, height: int) -> dict[str, f
     right_eye_open = distance_px(landmarks[386], landmarks[374], width, height)
     mouth_width = distance_px(landmarks[61], landmarks[291], width, height)
     mouth_open = distance_px(landmarks[13], landmarks[14], width, height)
-    mouth_roundness = mouth_open / max(mouth_width, 1.0)
 
     return {
         "eye_open": ((left_eye_open + right_eye_open) / 2) / face_width,
         "mouth_open": mouth_open / face_width,
-        "mouth_roundness": mouth_roundness,
+        "mouth_width": mouth_width / face_width,
     }
 
 
