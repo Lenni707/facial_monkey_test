@@ -19,10 +19,12 @@ ASSETS_DIR = ROOT_DIR / "assets"
 STATIC_DIR = ROOT_DIR / "static"
 MONKEY_IMAGE = ASSETS_DIR / "thinking_monkey.jpeg"
 SPEED_FACE_IMAGE = ASSETS_DIR / "speed_face.png"
+MOGGING_IMAGE = ASSETS_DIR / "mogger.jpeg"
 
 FRAME_PREFIX = "data:image/jpeg;base64,"
 FINGER_MOUTH_THRESHOLD = 0.70
-SPEED_FACE_THRESHOLD = 0.60
+SPEED_FACE_THRESHOLD = 0.57
+CHIN_FINGER_THRESHOLD = 0.68
 
 app = FastAPI(title="Finger-to-Mouth Monkey Meme")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -42,6 +44,7 @@ def asset_status() -> dict[str, bool]:
     return {
         "monkeyImageAvailable": MONKEY_IMAGE.exists(),
         "speedFaceImageAvailable": SPEED_FACE_IMAGE.exists(),
+        "moggingImageAvailable": MOGGING_IMAGE.exists(),
     }
 
 
@@ -96,23 +99,36 @@ class GestureDetector:
         face = extract_face(face_results, width, height)
         hand = extract_hand(hand_results, width, height)
         finger_mouth_confidence = compute_finger_mouth_confidence(face, hand, width, height)
+        chin_finger_confidence = compute_chin_finger_confidence(face, hand, width, height)
         speed_face_confidence = compute_speed_face_confidence(face)
         expression_active = speed_face_confidence >= SPEED_FACE_THRESHOLD
         finger_mouth_active = finger_mouth_confidence >= FINGER_MOUTH_THRESHOLD
-        active_image = "speedFace" if expression_active else "monkey" if finger_mouth_active else None
+        chin_finger_active = chin_finger_confidence >= CHIN_FINGER_THRESHOLD
+        active_image = (
+            "mogging"
+            if chin_finger_active
+            else "speedFace"
+            if expression_active
+            else "monkey"
+            if finger_mouth_active
+            else None
+        )
 
         return {
             "faceBox": face["box"] if face else None,
             "handBox": hand["box"] if hand else None,
-            "confidence": max(finger_mouth_confidence, speed_face_confidence),
+            "confidence": max(finger_mouth_confidence, speed_face_confidence, chin_finger_confidence),
             "fingerMouthConfidence": finger_mouth_confidence,
             "speedFaceConfidence": speed_face_confidence,
-            "gestureActive": finger_mouth_active or expression_active,
+            "chinFingerConfidence": chin_finger_confidence,
+            "gestureActive": finger_mouth_active or expression_active or chin_finger_active,
             "activeImage": active_image,
             "fingerMouthThreshold": FINGER_MOUTH_THRESHOLD,
             "speedFaceThreshold": SPEED_FACE_THRESHOLD,
+            "chinFingerThreshold": CHIN_FINGER_THRESHOLD,
             "monkeyImageAvailable": MONKEY_IMAGE.exists(),
             "speedFaceImageAvailable": SPEED_FACE_IMAGE.exists(),
+            "moggingImageAvailable": MOGGING_IMAGE.exists(),
         }
 
 
@@ -137,12 +153,15 @@ def empty_result() -> dict[str, Any]:
         "confidence": 0.0,
         "fingerMouthConfidence": 0.0,
         "speedFaceConfidence": 0.0,
+        "chinFingerConfidence": 0.0,
         "gestureActive": False,
         "activeImage": None,
         "fingerMouthThreshold": FINGER_MOUTH_THRESHOLD,
         "speedFaceThreshold": SPEED_FACE_THRESHOLD,
+        "chinFingerThreshold": CHIN_FINGER_THRESHOLD,
         "monkeyImageAvailable": MONKEY_IMAGE.exists(),
         "speedFaceImageAvailable": SPEED_FACE_IMAGE.exists(),
+        "moggingImageAvailable": MOGGING_IMAGE.exists(),
     }
 
 
@@ -157,11 +176,16 @@ def extract_face(results: Any, width: int, height: int) -> dict[str, Any] | None
     mouth_indexes = [13, 14, 61, 291]
     mouth_points = [(landmarks[i].x * width, landmarks[i].y * height) for i in mouth_indexes]
     mouth_center = average_point(mouth_points)
+    chin_points = [
+        point_xy(landmarks[index], width, height)
+        for index in [152, 148, 176, 149, 150, 136, 172, 397, 365, 379, 378, 400, 377]
+    ]
     metrics = extract_face_metrics(landmarks, width, height)
 
     return {
         "box": square_box(min(xs), min(ys), max(xs), max(ys), width, height),
         "mouth": mouth_center,
+        "chinPoints": chin_points,
         "metrics": metrics,
     }
 
@@ -175,20 +199,12 @@ def extract_hand(results: Any, width: int, height: int) -> dict[str, Any] | None
     ys = [landmark.y * height for landmark in landmarks]
 
     index_tip = landmarks[8]
-    thumb_tip = landmarks[4]
-    fingertip = closest_to_mouth_candidate(
-        [(index_tip.x * width, index_tip.y * height), (thumb_tip.x * width, thumb_tip.y * height)]
-    )
+    fingertip = point_xy(index_tip, width, height)
 
     return {
         "box": square_box(min(xs), min(ys), max(xs), max(ys), width, height),
         "fingertip": fingertip,
     }
-
-
-def closest_to_mouth_candidate(points: list[tuple[float, float]]) -> tuple[float, float]:
-    # The actual mouth comparison happens later; default to index fingertip for stable output.
-    return points[0]
 
 
 def compute_finger_mouth_confidence(
@@ -207,6 +223,26 @@ def compute_finger_mouth_confidence(
     frame_scale = math.hypot(width, height)
     close_distance = frame_scale * 0.035
     far_distance = frame_scale * 0.16
+    confidence = 1.0 - ((distance - close_distance) / (far_distance - close_distance))
+
+    return round(max(0.0, min(1.0, confidence)), 2)
+
+
+def compute_chin_finger_confidence(
+    face: dict[str, Any] | None,
+    hand: dict[str, Any] | None,
+    width: int,
+    height: int,
+) -> float:
+    if not face or not hand:
+        return 0.0
+
+    finger = hand["fingertip"]
+    distance = min(math.hypot(finger[0] - point[0], finger[1] - point[1]) for point in face["chinPoints"])
+
+    frame_scale = math.hypot(width, height)
+    close_distance = frame_scale * 0.03
+    far_distance = frame_scale * 0.13
     confidence = 1.0 - ((distance - close_distance) / (far_distance - close_distance))
 
     return round(max(0.0, min(1.0, confidence)), 2)
@@ -245,6 +281,10 @@ def extract_face_metrics(landmarks: Any, width: int, height: int) -> dict[str, f
 
 def distance_px(point_a: Any, point_b: Any, width: int, height: int) -> float:
     return math.hypot((point_a.x - point_b.x) * width, (point_a.y - point_b.y) * height)
+
+
+def point_xy(point: Any, width: int, height: int) -> tuple[float, float]:
+    return (point.x * width, point.y * height)
 
 
 def normalized_inverse(value: float, low: float, high: float) -> float:

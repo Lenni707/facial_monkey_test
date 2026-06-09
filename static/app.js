@@ -5,6 +5,7 @@ const cameraStatus = document.getElementById("cameraStatus");
 const memePanel = document.querySelector(".meme-panel");
 const monkeyImage = document.getElementById("monkeyImage");
 const speedFaceImage = document.getElementById("speedFaceImage");
+const moggingImage = document.getElementById("moggingImage");
 
 const drawCanvas = document.createElement("canvas");
 const drawContext = drawCanvas.getContext("2d");
@@ -27,6 +28,7 @@ async function refreshAssetStatus() {
   const status = await response.json();
   monkeyImage.classList.toggle("available", status.monkeyImageAvailable);
   speedFaceImage.classList.toggle("available", status.speedFaceImageAvailable);
+  moggingImage.classList.toggle("available", status.moggingImageAvailable);
 }
 
 async function startCamera() {
@@ -86,6 +88,7 @@ function updateUi(result) {
   memePanel.dataset.activeImage = result.activeImage || "";
   monkeyImage.classList.toggle("available", Boolean(result.monkeyImageAvailable));
   speedFaceImage.classList.toggle("available", Boolean(result.speedFaceImageAvailable));
+  moggingImage.classList.toggle("available", Boolean(result.moggingImageAvailable));
   drawOverlay(result);
 }
 

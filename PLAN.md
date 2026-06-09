@@ -8,6 +8,8 @@
 - Added the `assets/` folder and switched the meme display to `assets/thinking_monkey.jpeg`.
 - Added a second facial-expression trigger for `assets/speed_face.png`.
 - Added `assets/speed_face.png`.
+- Lowered the speed-face threshold to `0.57`.
+- Added a chin/jaw index-finger trigger for `assets/mogger.jpeg`.
 - Added Dockerfile and Docker Compose configuration.
 - Verified `docker compose build` succeeds after Docker was started.
 - Started the app container with `docker compose up -d`.
@@ -20,6 +22,8 @@
 ## Future
 - Replace `assets/thinking_monkey.jpeg` if a different meme image is wanted later.
 - Replace `assets/speed_face.png` if a different expression image is wanted later.
+- Add or replace `assets/mogger.jpeg` for the chin/jaw gesture.
 - Open the app in a browser and verify webcam permissions.
 - Tune the finger-to-mouth confidence threshold if needed.
 - Tune the facial-expression confidence threshold if needed.
+- Tune the chin/jaw gesture confidence threshold if needed.
