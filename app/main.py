@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 ROOT_DIR = Path(__file__).resolve().parent.parent
 ASSETS_DIR = ROOT_DIR / "assets"
 STATIC_DIR = ROOT_DIR / "static"
-MONKEY_IMAGE = ASSETS_DIR / "monkey_thinking.png"
+MONKEY_IMAGE = ASSETS_DIR / "thinking_monkey.jpeg"
 
 FRAME_PREFIX = "data:image/jpeg;base64,"
 GESTURE_THRESHOLD = 0.70

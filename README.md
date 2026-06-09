@@ -1,6 +1,6 @@
 # Facial Monkey Test
 
-A containerized Python webcam app that shows your camera feed on the left and displays `assets/monkey_thinking.png` on the right when your finger is detected near your mouth.
+A containerized Python webcam app that shows your camera feed on the left and displays `assets/thinking_monkey.jpeg` on the right when your finger is detected near your mouth.
 
 ## Run
 
@@ -15,7 +15,7 @@ Open http://localhost:8000 and allow webcam access in the browser.
 Add your image here:
 
 ```text
-assets/monkey_thinking.png
+assets/thinking_monkey.jpeg
 ```
 
 Until that file exists, the app shows a placeholder in the right pane.
